@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Seller Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0b0b0b;
+      color: #ccffcc;
+    }
+  
+    .navbar {
+      background-color: #111;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #00cc88;
+    }
+  
+    .navbar h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      color: #00cc88;
+    }
+  
+    .logout-btn {
+      background-color: transparent;
+      color: #00cc88;
+      border: 1px solid #00cc88;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+  
+    .logout-btn:hover {
+      background-color: #00cc88;
+      color: #0b0b0b;
+    }
+  
+    .container {
+      padding: 2rem;
+      max-width: 800px;
+      margin: auto;
+    }
+  
+    .wallet {
+      font-size: 1.1rem;
+      margin-bottom: 1.5rem;
+      color: #aaffcc;
+    }
+  
+    .offer-form {
+      background-color: #151515;
+      padding: 1.5rem;
+      border-radius: 10px;
+      border: 1px solid #00cc88;
+      margin-bottom: 2rem;
+    }
+  
+    .offer-form h3 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+  
+    .offer-form label {
+      display: block;
+      margin-bottom: 0.4rem;
+      color: #ccffcc;
+    }
+  
+    .offer-form select,
+    .offer-form input {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+      border: 1px solid #00cc88;
+      background-color: #0f0f0f;
+      color: #ccffcc;
+      border-radius: 5px;
+    }
+  
+    .offer-form button {
+      background-color: #0f0f0f;
+      color: #00cc88;
+      border: 1px solid #00cc88;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+  
+    .offer-form button:hover {
+      background-color: #00cc88;
+      color: #0b0b0b;
+    }
+  
+    #offers .offer {
+      background-color: #151515;
+      border: 1px solid #00cc88;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+  
+    #offers .offer button {
+      background-color: transparent;
+      color: #00cc88;
+      border: 1px solid #00cc88;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.3s;
+      margin-top: 0.5rem;
+    }
+  
+    #offers .offer button:hover {
+      background-color: #00cc88;
+      color: #0b0b0b;
+    }
+  
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+  
+    .modal-content {
+      background-color: #151515;
+      padding: 2rem;
+      border-radius: 10px;
+      border: 1px solid #00cc88;
+      text-align: center;
+      max-width: 400px;
+    }
+  
+    .modal-content button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      background-color: transparent;
+      color: #00cc88;
+      border: 1px solid #00cc88;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+  
+    .modal-content button:hover {
+      background-color: #00cc88;
+      color: #0b0b0b;
+    }
+  
+    canvas {
+      margin-top: 0.5rem;
+      background: #fff;
+      padding: 0.5rem;
+      border-radius: 8px;
+    }
+  </style>  
+</head>
+  <body>
+  <div class="navbar">
+    <h2>Seller Dashboard</h2>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+
+  <div class="container">
+    <div class="wallet"><strong>Wallet Balance:</strong> <span id="wallet">...</span> USDT</div>
+
+    <div class="offer-form">
+      <h3>Create New USDT Offer</h3>
+      <label for="usdtAmount">Select USDT Amount:</label>
+      <select id="usdtAmount">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="other">Other</option>
+      </select>
+      <input type="number" id="customAmount" placeholder="Enter custom amount" style="display:none;"/>
+      <p>⚠️ A 2.5% transaction fee will be charged when the order is matched.</p>
+      <button onclick="createOffer()">Post Offer</button>
+    </div>
+
+    <h3>Your Active Offers:</h3>
+    <div id="offers">
+      <p><strong>Offer ID:</strong> ${offer._id}</p>
+      <p><strong>Total USDT:</strong> ${offer.totalUSDT}</p>
+      <p><strong>Remaining:</strong> ${offer.remainingUSDT}</p>
+      <p><strong>Status:</strong> ${offer.status}</p>
+      <p><strong>QR:</strong><br><img src="${qrCode}" /></p>
+    </div>
+  </div>
+
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <p id="modalMsg"></p>
+      <button onclick="handleModalConfirm()">✅ Confirm</button>
+      <button onclick="closeModal()">❌ Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Not logged in. Redirecting...");
+      window.location.href = "login.html";
+    }
+
+    const defaultUPIID = "seller@upi";
+    let walletBalance = 0;
+    let pendingEscrowId = null;
+
+    document.getElementById("usdtAmount").addEventListener("change", function () {
+      document.getElementById("customAmount").style.display = this.value === "other" ? "block" : "none";
+    });
+
+    async function getWalletBalance() {
+      try {
+        const res = await fetch("http://localhost:8080/api/users/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const user = await res.json();
+        walletBalance = user.usdtWallet || 0;
+        document.getElementById("wallet").textContent = walletBalance.toFixed(2);
+      } catch (err) {
+        console.error("Wallet fetch error:", err);
+        document.getElementById("wallet").textContent = "⚠️ Error";
+      }
+    }
+
+    async function createOffer() {
+      let usdtAmount = document.getElementById("usdtAmount").value;
+      if (usdtAmount === "other") {
+        usdtAmount = document.getElementById("customAmount").value;
+      }
+
+      usdtAmount = parseFloat(usdtAmount);
+      if (!Number.isFinite(usdtAmount) || usdtAmount <= 0) {
+        alert("Enter valid amount.");
+        return;
+      }
+
+      if (usdtAmount > walletBalance) {
+        alert("Insufficient balance.");
+        return;
+      }
+
+      try {
+        const res = await fetch("http://localhost:8080/api/orders/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            amount: usdtAmount,
+            upiID: defaultUPIID,
+            usdtPrice: 85 // ✅ Hardcoded for now (or make an input field)
+            
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert("Offer posted!");
+          walletBalance -= usdtAmount;
+          document.getElementById("wallet").textContent = walletBalance.toFixed(2);
+          loadOffers();
+        } else {
+          alert(data.message || "Offer failed.");
+        }
+      } catch (err) {
+        console.error("Create offer error:", err);
+        alert("Server error.");
+      }
+    }
+
+    async function loadOffers() {
+      try {
+        const res = await fetch("http://localhost:8080/api/orders/my", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const offers = await res.json();
+        const container = document.getElementById("offers");
+        container.innerHTML = "";
+
+        offers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        offers.forEach(offer => {
+          const div = document.createElement("div");
+          div.className = "offer";
+          const qrId = `qr-${offer._id}`;
+          div.innerHTML = `
+            <p><strong>Offer ID:</strong> ${offer._id}</p>
+            <p><strong>Total USDT:</strong> ${offer.amount}</p>
+            <p><strong>Remaining:</strong> ${offer.remainingUSDT}</p>
+            <p><strong>Status:</strong> ${offer.status}</p>
+            <div><strong>QR:</strong> <canvas id="${qrId}"></canvas></div>
+            <button onclick="deleteOffer('${offer._id}')">Remove Offer</button>
+          `;
+          container.appendChild(div);
+
+          QRCode.toCanvas(document.getElementById(qrId),
+            `upi://pay?pa=${defaultUPIID}&pn=Seller&am=${offer.amount}&cu=INR`,
+            err => { if (err) console.error("QR error:", err); }
+          );
+        });
+      } catch (err) {
+        console.error("Offer load error:", err);
+        document.getElementById("offers").innerHTML = "<p>❌ Couldn't load offers.</p>";
+      }
+    }
+
+    async function deleteOffer(offerId) {
+      try {
+        const res = await fetch(`http://localhost:8080/api/orders/${offerId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          alert("Offer removed.");
+          loadOffers();
+          // Optionally, refresh wallet if USDT is refunded on deletion
+          getWalletBalance();
+        } else {
+          alert(data.message || "Failed to remove offer.");
+        }
+      } catch (err) {
+        console.error("Delete offer error:", err);
+        alert("Server error while deleting offer.");
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = "login.html";
+    }
+
+    function closeModal() {
+      document.getElementById("modal").style.display = "none";
+      pendingEscrowId = null;
+    }
+
+    async function handleModalConfirm() {
+      document.getElementById("modal").style.display = "none";
+      if (pendingEscrowId) {
+        await completeEscrow(pendingEscrowId);
+        pendingEscrowId = null;
+      }
+    }
+
+    async function completeEscrow(escrowId) {
+      try {
+        const res = await fetch(`http://localhost:8080/api/escrow/${escrowId}/complete`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert("✅ USDT released.");
+          getWalletBalance();
+          loadOffers();
+        } else {
+          alert(data.message || "❌ Could not complete.");
+        }
+      } catch (err) {
+        console.error("Escrow error:", err);
+        alert("❌ Server error.");
+      }
+    }
+
+    const socket = io("http://localhost", {
+      auth: { token: token }
+    });
+
+    socket.on("connect", () => {
+      console.log("✅ Socket connected.");
+    });
+
+    socket.on("offer-updated", () => {
+      console.log("📦 Offer updated.");
+      loadOffers();
+    });
+
+    socket.on("new-order", (data) => {
+      pendingEscrowId = data.escrowId;
+      document.getElementById("modalMsg").innerText = 
+        `📢 New Order!\n👤 Buyer: ${data.buyer.name}\n💰 ${data.amountAfterFee} USDT\n💸 ₹${data.totalINR}\n🆔 Order ID: ${data.orderId}\n\n✅ Confirm after UPI payment.`;
+      document.getElementById("modal").style.display = "flex";
+    });
+
+    socket.on("order-cancelled", (data) => {
+      console.log(`❌ Order ${data.orderId} cancelled.`);
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeModal();
+    });
+
+    getWalletBalance();
+    loadOffers();
+  </script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Buyer Dashboard</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #0b0b0b;
+      color: #ccffcc;
+      margin: 0;
+      padding: 0;
+    }
+    .navbar {
+      background-color: #111;
+      color: #00cc88;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #00cc88;
+    }
+    .navbar h2 {
+      margin: 0;
+    }
+    .logout-btn {
+      background-color: transparent;
+      color: #00cc88;
+      border: 1px solid #00cc88;
+      padding: 0.4rem 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .logout-btn:hover {
+      background-color: #00cc88;
+      color: #0b0b0b;
+    }
+    .container {
+      padding: 2rem;
+      max-width: 900px;
+      margin: auto;
+    }
+    .wallet {
+      margin-bottom: 1.5rem;
+      font-size: 1.2rem;
+      color: #aaffcc;
+    }
+    .offer {
+      background-color: #151515;
+      border: 1px solid #00cc88;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    .offer p {
+      margin: 0.5rem 0;
+    }
+    .offer input {
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      width: 120px;
+      border: 1px solid #00cc88;
+      border-radius: 5px;
+      background-color: #0f0f0f;
+      color: #ccffcc;
+    }
+    .offer button {
+      background-color: transparent;
+      color: #00cc88;
+      border: 1px solid #00cc88;
+      padding: 0.4rem 0.8rem;
+      margin-left: 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .offer button:hover {
+      background-color: #00cc88;
+      color: #0b0b0b;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <h2>Buyer Dashboard</h2>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+
+  <div class="container">
+    <div class="wallet"><strong>Wallet Balance:</strong> Loading...</div>
+    <h3>Available USDT Offers:</h3>
+    <div id="offers"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    const token = localStorage.getItem("token");
+
+    async function fetchWalletBalance() {
+      try {
+        const res = await fetch("http://localhost:8080/api/users/me", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        const user = await res.json();
+
+        if (!res.ok) throw new Error(user.message || "Failed to fetch wallet.");
+        document.querySelector(".wallet").innerHTML = `<strong>Wallet Balance:</strong> ${user.usdtWallet} USDT`;
+      } catch (err) {
+        console.error("Wallet fetch error:", err);
+        document.querySelector(".wallet").innerHTML = "<strong>Wallet Balance:</strong> ⚠️ Error loading";
+      }
+    }
+
+    async function fetchOffers() {
+      const res = await fetch("http://localhost:8080/api/orders", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const offers = await res.json();
+      const container = document.getElementById("offers");
+      container.innerHTML = "";
+
+      if (offers.length === 0) {
+        container.innerHTML = "<p>No offers available right now.</p>";
+        return;
+      }
+
+      offers.forEach(offer => {
+        const div = document.createElement("div");
+        div.className = "offer";
+        div.innerHTML = `
+          <p><strong>Seller:</strong> ${offer.sellerName}</p>
+          <p><strong>USDT Available:</strong> ${offer.remainingUSDT}</p>
+          <p><strong>Price (INR):</strong> ₹${offer.usdtPrice}</p>
+          <input type="number" id="buy-${offer._id}" placeholder="USDT" min="1" max="${offer.remainingUSDT}" />
+          <button onclick="buyNow('${offer._id}', ${offer.remainingUSDT})">Buy</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function buyNow(orderId, maxAmount) {
+      const input = document.getElementById(`buy-${orderId}`);
+      const amount = parseFloat(input.value);
+
+      if (!amount || amount <= 0 || amount > maxAmount) {
+        alert("Invalid amount.");
+        return;
+      }
+
+      try {
+        const res = await fetch("http://localhost:8080/api/orders/buy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ orderId, amount })
+        });
+
+        const data = await res.json();
+        if (!res.ok) return alert(data.message || "Purchase failed.");
+
+        alert(`✅ Escrow Created!\n\nPay ₹${data.totalINR} to UPI ID: ${data.upiID}\nYou'll receive ${data.amountAfterFee} USDT.`);
+        fetchOffers();
+        fetchWalletBalance();
+      } catch (err) {
+        console.error("Buy error:", err);
+        alert("Server error. Try again.");
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = "login.html";
+    }
+
+    fetchWalletBalance();
+    fetchOffers();
+
+    const socket = io("http://localhost:8080");
+    socket.on("new-order", fetchOffers);
+  </script>
+</body>
+</html>
